@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>WRX Cluster</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Fixed 1920x480 stage, scaled to fit the panel by JS. -->
+  <div id="stage">
+    <div id="cluster">
+
+      <!-- top tell-tale strip -->
+      <div class="tells" id="tells">
+        <span class="tell" data-t="head">LIGHTS</span>
+        <span class="tell" data-t="left">&#9664; TURN</span>
+        <span class="tell" data-t="eco">ECO</span>
+        <span class="tell" data-t="brake">BRAKE</span>
+        <span class="tell" data-t="hazard">HAZARD</span>
+        <span class="tell" data-t="right">TURN &#9654;</span>
+      </div>
+
+      <!-- LEFT: speed ring -->
+      <section class="side left">
+        <div class="ring main" id="speedRing">
+          <div class="ring-center">
+            <span class="ring-val" id="speed">0</span>
+            <span class="ring-unit">MPH</span>
+          </div>
+        </div>
+        <div class="bar"><span id="speedBar" class="fill green"></span></div>
+        <div class="minis" id="minisL"></div>
+      </section>
+
+      <!-- CENTER: perception HUD (revamped VisionLab) -->
+      <section class="center">
+        <div class="panel">
+          <canvas id="hud"></canvas>
+
+          <!-- turn-signal chevrons over the HUD -->
+          <div class="turn turn-l" id="turnL">&#8249;</div>
+          <div class="turn turn-r" id="turnR">&#8250;</div>
+
+          <!-- off-Pi camera: live YOLO-annotated feed fills the HUD -->
+          <img id="camFeed" class="cambg" alt="" />
+          <span class="campip-tag" id="camTag">CAM</span>
+
+          <!-- forward-collision banner -->
+          <div class="fcw" id="fcw">
+            <span class="fcw-state" id="fcwState">CLEAR</span>
+            <span class="fcw-reason" id="fcwReason">road ahead clear</span>
+          </div>
+
+          <!-- vision source chip -->
+          <div class="vsrc" id="vsrc"><span class="dot" id="vsrcDot"></span><span id="vsrcText">VISION OFF</span></div>
+        </div>
+      </section>
+
+      <!-- RIGHT: tach ring + gear -->
+      <section class="side right">
+        <div class="ring main tach" id="rpmRing">
+          <div class="shiftbar" id="shiftbar"></div>
+          <div class="ring-center">
+            <span class="ring-val" id="rpm">0</span>
+            <span class="ring-unit">RPM &times;1</span>
+          </div>
+          <div class="gearchip">
+            <img src="assets/gear-circle.svg" alt="" />
+            <b id="gear">P</b>
+          </div>
+        </div>
+        <div class="bar"><span id="rpmBar" class="fill red"></span></div>
+        <div class="minis" id="minisR"></div>
+      </section>
+
+      <!-- bottom status bar -->
+      <div class="statusbar">
+        <span class="dot" id="linkDot"></span>
+        <span id="linkText">--</span>
+        <span class="sep">·</span>
+        <span id="visStat">VISION —</span>
+        <span class="sep">·</span>
+        <span id="seqText">seq 0</span>
+        <span class="clock" id="clock"></span>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="dashboard.js"></script>
+  <script>
+    // Auto-reload: bridge watches web/ for file changes and tells us to reload.
+    (function() {
+      var _reloadWs, _reloadTimer;
+      function connectReload() {
+        try { _reloadWs = new WebSocket('ws://' + location.host + '/ws-reload'); } catch(e) { return; }
+        _reloadWs.onmessage = function(e) {
+          try {
+            var d = JSON.parse(e.data);
+            if (d.type === 'reload') {
+              console.log('[auto-reload] files changed:', d.changed, '— reloading');
+              location.reload();
+            }
+          } catch(ex) {}
+        };
+        _reloadWs.onclose = function() { clearTimeout(_reloadTimer); _reloadTimer = setTimeout(connectReload, 2000); };
+        _reloadWs.onerror = function() { try { _reloadWs.close(); } catch(ex) {} };
+      }
+      connectReload();
+    })();
+  </script>
+</body>
+</html>

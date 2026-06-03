@@ -1,0 +1,17 @@
+[Unit]
+Description=Car Cluster serial bridge (FastAPI + WebSocket)
+After=local-fs.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+WorkingDirectory=__DIR__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 __DIR__/serial_bridge.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

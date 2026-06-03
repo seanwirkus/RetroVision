@@ -1,0 +1,49 @@
+[Unit]
+Description=Car Cluster Chromium kiosk (cage compositor)
+After=car-cluster-bridge.service
+Wants=car-cluster-bridge.service
+Conflicts=getty@tty1.service
+
+[Service]
+User=__USER__
+Group=__USER__
+WorkingDirectory=__DIR__
+Environment=XDG_RUNTIME_DIR=/run/user/__UID__
+Environment=WLR_LIBINPUT_NO_DEVICES=1
+Environment=WLR_NO_HARDWARE_CURSORS=1
+Environment=LIBSEAT_BACKEND=seatd
+Environment=WLR_RENDERER=pixman
+SupplementaryGroups=video render input tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+ExecStartPre=+/bin/mkdir -p /run/user/__UID__
+ExecStartPre=+/bin/chown __USER__:__USER__ /run/user/__UID__
+ExecStartPre=+/bin/chmod 700 /run/user/__UID__
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8000/ >/dev/null && exit 0; sleep 0.25; done; exit 1'
+ExecStart=/usr/bin/cage -s -- __CHROMIUM__ \
+  --kiosk --app=http://127.0.0.1:8000/ \
+  --disk-cache-dir=/tmp/cc-cache --disk-cache-size=1 --aggressive-cache-discard \
+  --disable-application-cache --media-cache-size=1 \
+  --disable-gpu --disable-gpu-compositing \
+  --disable-accelerated-video-decode --disable-accelerated-mjpeg-decode \
+  --disable-accelerated-2d-canvas --disable-webgl --disable-webgl2 \
+  --disable-features=Vulkan,Translate,TranslateUI,UseSkiaRenderer,CanvasOopRasterization \
+  --ozone-platform=wayland --enable-features=UseOzonePlatform \
+  --window-size=1920,480 --window-position=0,0 \
+  --start-fullscreen \
+  --noerrdialogs --disable-infobars --hide-scrollbars \
+  --disable-pinch --overscroll-history-navigation=0 \
+  --no-first-run --disable-session-crashed-bubble \
+  --disable-background-networking \
+  --autoplay-policy=no-user-gesture-required \
+  --check-for-update-interval=31536000
+Restart=on-failure
+RestartSec=3
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

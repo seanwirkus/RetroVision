@@ -1,0 +1,23 @@
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true
+      optional: true
+  wifis:
+    wlan0:
+      dhcp4: true
+      optional: false
+      regulatory-domain: US
+      access-points:
+        TMOBILE-693A:
+          password: "8svtkb75frx"
+        BBOPHOUSE:
+          password: "Simon.123"
+        "Sean's iPhone":
+          password: "mangomeow"
+        "Sean iPhone":
+          password: "mangomeow"
+        UCSD-GUEST:
+          auth:
+            key-management: none

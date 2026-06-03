@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Cluster</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="cluster">
+    <!-- LEFT: speed -->
+    <section class="side left">
+      <div class="topblock">
+        <div class="bigrow">
+          <span id="speed" class="big">0</span>
+        </div>
+        <div class="bar"><span id="speedBar" class="fill"></span></div>
+      </div>
+      <div class="gauges" id="gaugesL"></div>
+    </section>
+
+    <!-- CENTER: glass road panel -->
+    <section class="center">
+      <div class="panel">
+        <img class="road road-l" src="assets/road-left.svg" alt="" />
+        <img class="road road-r" src="assets/road-right.svg" alt="" />
+        <div class="turn turn-l" id="turnL">&#8249;</div>
+        <div class="turn turn-r" id="turnR">&#8250;</div>
+        <div class="tells" id="tells">
+          <span class="tell" data-t="head">LIGHTS</span>
+          <span class="tell" data-t="brake">BRAKE</span>
+          <span class="tell" data-t="hazard">HAZ</span>
+        </div>
+        <div class="statusbar">
+          <span class="dot" id="linkDot"></span>
+          <span id="linkText">--</span>
+          <span class="clock" id="clock"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: gear + rpm -->
+    <section class="side right">
+      <div class="topblock">
+        <div class="gearrow">
+          <span class="gearchip">
+            <img src="assets/gear-circle.svg" alt="" />
+            <b id="gear">P</b>
+          </span>
+          <span id="rpmText" class="rpm">0 rpm</span>
+        </div>
+        <div class="bar"><span id="rpmBar" class="fill"></span></div>
+      </div>
+      <div class="gauges" id="gaugesR"></div>
+    </section>
+  </div>
+  <script src="dashboard.js"></script>
+</body>
+</html>
