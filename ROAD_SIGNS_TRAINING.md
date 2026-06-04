@@ -100,10 +100,19 @@ just deliver `road-signs.pt` + its `names` dict.
 
 ---
 
+## Coordinating with the origin machine
+
+Talk to the other Claude through **`SIGNS_HANDOFF.md`** (a git-synced mailbox).
+Before you start and after each milestone: `git pull --rebase`, read it, append
+your message, set STATUS, then commit + push. That's how the origin machine knows
+training is done and gets the class `names` it needs to wire the model in.
+
 ## TL;DR for the other Claude
 
-1. `pip install -U ultralytics`
-2. `export ULTRALYTICS_API_KEY=<platform key>`  (do NOT `yolo login`)
-3. Run the `yolo train ...` block in §2. Use `batch=16` if `-1` OOMs.
-4. Find `best.pt`, grab `YOLO(best.pt).names`.
-5. Deliver `best.pt` + the names dict back. Done.
+1. `git pull --rebase` and read `SIGNS_HANDOFF.md`.
+2. `pip install -U ultralytics`
+3. `export ULTRALYTICS_API_KEY=<platform key>`  (do NOT `yolo login`)
+4. Run the `yolo train ...` block in §2. Use `batch=16` if `-1` OOMs.
+5. Find `best.pt`, grab `YOLO(best.pt).names`.
+6. Fill DELIVERABLES in `SIGNS_HANDOFF.md`, set STATUS=`TRAINED_AWAITING_TRANSFER`,
+   commit + push. Send `best.pt` out-of-band (gitignored). Done.
