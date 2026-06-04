@@ -102,12 +102,36 @@ def _part_side(name):
         return "rear"
     return None
 
-# plate detector — prefer the newer LPR model once exported, else the old one
-_PLATE_PATHS = ["lpr-v1.pt", "plate-detector.pt"]
+# plate detector — prefer the Platform-trained ANPR yolo26n (mAP50 0.858),
+# then the older LPR models. First file that exists wins. Override with
+# PLATE_WEIGHTS=/path/to.pt
+_PLATE_PATHS = [os.environ.get("PLATE_WEIGHTS", ""), "anpr-2.pt",
+                "lpr-v1.pt", "plate-detector.pt"]
+_PLATE_PATHS = [p for p in _PLATE_PATHS if p]
 _plate_path = next((p for p in _PLATE_PATHS if os.path.exists(p)), None)
 plate_model = YOLO(_plate_path) if _plate_path else None
+# Restrict detections to the plate class so junk labels (e.g. anpr-2's 'class1')
+# can't hijack the highest-conf pick. None = accept any class.
+_PLATE_CLASS_ID = None
 if plate_model is not None:
-    print(f"[vision] plate detector: {_plate_path}", flush=True)
+    _PLATE_CLASS_ID = next(
+        (i for i, n in plate_model.names.items() if "plate" in str(n).lower()), None)
+    print(f"[vision] plate detector: {_plate_path} "
+          f"classes={plate_model.names} use_class={_PLATE_CLASS_ID}", flush=True)
+
+# char-level plate OCR (YOLO that detects each digit/letter as a box). Replaces
+# EasyOCR when present — faster, GPU-friendly, fully offline. Set CHAR_OCR=0 to
+# force EasyOCR. PLATE_CHARS_WEIGHTS overrides the path.
+CHAR_OCR = os.environ.get("CHAR_OCR", "1") != "0"
+_CHAR_PATH = next((p for p in [os.environ.get("PLATE_CHARS_WEIGHTS", ""),
+                               "plate-chars.pt"] if p and os.path.exists(p)), None)
+char_model = YOLO(_CHAR_PATH) if (CHAR_OCR and _CHAR_PATH) else None
+CHAR_CONF_MIN = float(os.environ.get("CHAR_CONF_MIN", "0.40"))
+CHAR_UPSCALE_W = int(os.environ.get("CHAR_UPSCALE_W", "200"))  # upscale plate crop to >= this width
+if char_model is not None:
+    char_model.to(DEVICE)
+    print(f"[vision] plate-char OCR: {_CHAR_PATH} ({len(char_model.names)} classes)",
+          flush=True)
 
 # ---- license-plate OCR (EasyOCR) ----
 try:
@@ -262,9 +286,56 @@ def _enrich_v2_detections(detections, width, height, now_t):
             d["orientation"] = d.get("orient") or "unknown"
 
 
+def _ocr_plate_chars(plate_bgr):
+    """Read a plate crop with the char-detection YOLO: detect each digit/letter,
+    group into rows (handles 1- or 2-line plates), sort left->right, join.
+    Returns (text, mean_conf) or None."""
+    if char_model is None or plate_bgr is None or plate_bgr.size == 0:
+        return None
+    # upscale small plate crops so characters are big enough to detect (the
+    # char model was trained on larger plates). Needs real detail to begin with
+    # — sub-~60px-wide plates from low-res video usually can't be recovered.
+    if plate_bgr.shape[1] < CHAR_UPSCALE_W:
+        s = CHAR_UPSCALE_W / plate_bgr.shape[1]
+        plate_bgr = cv2.resize(plate_bgr, None, fx=s, fy=s,
+                               interpolation=cv2.INTER_CUBIC)
+    res = char_model(plate_bgr, conf=CHAR_CONF_MIN, verbose=False, device=DEVICE)
+    chars = []
+    for b in res[0].boxes:
+        x1, y1, x2, y2 = b.xyxy[0].tolist()
+        chars.append({
+            "ch": char_model.names[int(b.cls[0])],
+            "conf": float(b.conf[0]),
+            "cx": (x1 + x2) / 2,
+            "cy": (y1 + y2) / 2,
+            "h": y2 - y1,
+        })
+    if len(chars) < 4:                 # too few = not a real plate read
+        return None
+    # cluster into rows by vertical position (2-line plates read top then bottom)
+    med_h = sorted(c["h"] for c in chars)[len(chars) // 2]
+    chars.sort(key=lambda c: c["cy"])
+    rows, cur = [], [chars[0]]
+    for c in chars[1:]:
+        if c["cy"] - cur[-1]["cy"] > 0.6 * med_h:
+            rows.append(cur); cur = [c]
+        else:
+            cur.append(c)
+    rows.append(cur)
+    text = ""
+    for row in rows:
+        row.sort(key=lambda c: c["cx"])
+        text += "".join(c["ch"] for c in row)
+    text = "".join(PLATE_RE.findall(text.upper()))
+    if len(text) < 4:
+        return None
+    mean_conf = sum(c["conf"] for c in chars) / len(chars)
+    return (text, mean_conf)
+
+
 def read_plate(frame, xyxy):
-    """Detect plate with YOLO (if available), then OCR using EasyOCR."""
-    if not _HAS_OCR:
+    """Detect plate with YOLO, then OCR with the char model (preferred) or EasyOCR."""
+    if char_model is None and not _HAS_OCR:
         return None
     h, w = frame.shape[:2]
     x1, y1, x2, y2 = (int(v) for v in xyxy)
@@ -283,6 +354,8 @@ def read_plate(frame, xyxy):
         best_plate = None
         best_conf = 0.0
         for box in p_res[0].boxes:
+            if _PLATE_CLASS_ID is not None and int(box.cls[0]) != _PLATE_CLASS_ID:
+                continue          # skip non-plate classes (e.g. 'class1')
             c = float(box.conf[0])
             if c > best_conf and c > 0.25:
                 best_conf = c
@@ -305,7 +378,15 @@ def read_plate(frame, xyxy):
         
     if roi.size == 0:
         return None
-        
+
+    # 1b. Preferred OCR: char-detection YOLO on the plate crop (fast, offline).
+    if char_model is not None:
+        hit = _ocr_plate_chars(roi)
+        if hit:
+            return hit
+        if not _HAS_OCR:
+            return None      # char model is the only OCR and it found nothing
+
     # 2. Sharpness gate — a motion-blurred plate has no legible characters, so
     #    skip it instead of emitting OCR garbage (var-of-Laplacian = focus measure).
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) if roi.ndim == 3 else roi
