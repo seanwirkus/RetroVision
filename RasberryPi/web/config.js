@@ -27,12 +27,19 @@ const DEFAULT_VISION_HOSTS = [
   '100.64.75.99',         // Tailscale address
   '192.168.1.182',        // home LAN address used earlier
 ];
+// Priority: explicit ?visionHost= param → the host serving this page (self-
+// contained appliance: box runs dashboard AND vision on the same IP) → saved
+// value → known fallbacks. The serving host comes early so an all-in-one box
+// "just works" and survives IP changes without editing this file.
+const servingHost = (window.location.hostname && window.location.hostname !== 'localhost')
+  ? window.location.hostname : null;
 const configuredVisionHosts = [
-  localDevVisionHost,
-  FALLBACK_VISION_HOST,
   (visionHostParam || '').trim(),
-  ...DEFAULT_VISION_HOSTS,
+  localDevVisionHost,
+  servingHost,
   window.localStorage.getItem('visionHost'),
+  FALLBACK_VISION_HOST,
+  ...DEFAULT_VISION_HOSTS,
 ].filter((host, index, hosts) => host && hosts.indexOf(host) === index);
 const configuredVisionHost = configuredVisionHosts[0] || null;
 const configuredVisionWs = configuredVisionHost ? `ws://${configuredVisionHost}:8766/ws` : null;
