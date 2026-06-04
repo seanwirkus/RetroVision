@@ -364,7 +364,9 @@ try {
     const quick = (nowTs - last < 12000) ? (+(localStorage.getItem('camQuick') || 0) + 1) : 0;
     localStorage.setItem('camTs', String(nowTs));
     localStorage.setItem('camQuick', String(quick));
-    if (quick >= 3) { camDisabled = true; localStorage.setItem('camOff', String(nowTs + 180000)); }
+    // Only trip on a genuine reload storm (the Pi decoder crash signature), and
+    // cool down briefly — so normal page reloads don't hide the video.
+    if (quick >= 8) { camDisabled = true; localStorage.setItem('camOff', String(nowTs + 30000)); }
     setTimeout(() => { try { localStorage.setItem('camQuick', '0'); } catch {} }, 20000);
   }
 } catch {}
