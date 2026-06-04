@@ -5,10 +5,10 @@ before flashy.** Status: ✅ done · 🔄 in progress · ⬜ todo.
 
 | Pass | Owner | Goal | Status |
 |------|-------|------|--------|
-| **0** Freeze + document | Claude + Antigravity | Ownership docs, schema capture, smoke tests, app starts | 🔄 |
+| **0** Freeze + document | Claude + Antigravity | Ownership docs, schema capture, smoke tests, app starts | ✅ |
 | **1** Telemetry contract | Claude + Codex | Lock v1→v2 schema; backend emits consistently; no visual change | ⬜ |
 | **2** Real lane detection | Codex | Lanes from video frames; emit left/right/center + `confidence` + `source`; clamp to frame; fallback only when low | 🔄 (Canny+Hough live, no confidence/center yet) |
-| **3** Frontend lane render | Cursor | Render backend lanes; smooth; fade vision↔fallback; fallback visually distinct | 🔄 (renders left/right; no fade/confidence) |
+| **3** Frontend lane render | Cursor | Render backend lanes; smooth; fade vision↔fallback; fallback visually distinct | ✅ |
 | **4** Object tracking polish | Codex | Stable `tid` (never null); add `age_ms`, `vx/vy`, `last_seen`; less flicker | ⬜ (tid null gap) |
 | **5** 3D car polish | Cursor | Premium 3D cars, capped size, far-fade, no clutter, no ego car | ✅ baseline (extruded 3D, size-capped, ego removed) — refine |
 | **6** Plate OCR ×10 | Codex | Stronger temporal voting; better crop; tid-bound memory; confidence threshold; no flicker | ✅ baseline (vote-by-tid, sharpness gate) — add confidence/age to schema |

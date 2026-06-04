@@ -9,10 +9,10 @@ Every pass runs the relevant checks before logging. Backend = vision-lab; fronte
 lsof -i :8766 -sTCP:LISTEN -n -P
 
 # --- python syntax (backend) ---
-python3 -m py_compile "/Users/sean/Desktop/RetroView Ultra/vision-lab/yolo_server.py"
+python3 -m py_compile "Vision Lab/yolo_server.py"   # from RetroVision root
 
 # --- js syntax (frontend) ---
-node --check "/Users/sean/Documents/RasberryPi/web/dashboard.js"
+node --check "RasberryPi/web/dashboard.js"
 
 # --- MJPEG reachable + bandwidth (should be ~1–2 MB/s, NOT 13) ---
 curl -s -m 2 -o /dev/null -w "bytes in 2s=%{size_download} http=%{http_code}\n" http://127.0.0.1:8766/video_feed
@@ -50,7 +50,7 @@ PY
 - [ ] Smooth (rAF), no layout thrash, no per-frame DOM churn.
 
 ## Full-app (Antigravity)
-- [ ] `smoke_test.sh`: backend proc + MJPEG 200 + WS has detections + dashboard route 200.
+- [ ] `./scripts/smoke_test.sh` (from repo root): backend proc + MJPEG + WS detections + lanes + FPS + bandwidth.
 - [ ] Bandwidth check ≤ ~2 MB/s.
 - [ ] WS not stale while backend alive.
 - [ ] Clean restart recovers (browser reconnects WS + MJPEG).

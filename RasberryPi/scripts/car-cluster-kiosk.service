@@ -31,7 +31,7 @@ ExecStart=/usr/bin/cage -s -- __CHROMIUM__ \
   --disable-accelerated-2d-canvas --disable-webgl --disable-webgl2 \
   --disable-features=Vulkan,Translate,TranslateUI,UseSkiaRenderer,CanvasOopRasterization \
   --ozone-platform=wayland --enable-features=UseOzonePlatform \
-  --window-size=1920,480 --window-position=0,0 \
+  --window-size=1920,440 --window-position=0,0 \
   --start-fullscreen \
   --noerrdialogs --disable-infobars --hide-scrollbars \
   --disable-pinch --overscroll-history-navigation=0 \

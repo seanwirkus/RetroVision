@@ -39,9 +39,9 @@ const configuredVisionWs = configuredVisionHost ? `ws://${configuredVisionHost}:
 const configuredVisionMjpeg = configuredVisionHost ? `http://${configuredVisionHost}:8766/video_feed` : null;
 
 window.CLUSTER_CONFIG = {
-  // ---- design canvas (GeeekPi 11.26" panel) ----
+  // ---- design canvas (GeeekPi 11.26" 1920x440 panel) ----
   BASE_W: 1920,
-  BASE_H: 480,
+  BASE_H: 440,
 
   // ---- gauge ranges ----
   TACH_REDLINE: 6500,   // WRX EJ25 redline-ish

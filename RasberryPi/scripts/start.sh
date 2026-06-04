@@ -33,7 +33,7 @@ if [ -z "$CHROME" ]; then
 else
   exec "$CHROME" \
     --kiosk --app="$URL" \
-    --window-size=1920,480 --window-position=0,0 \
+    --window-size=1920,440 --window-position=0,0 \
     --start-fullscreen \
     --noerrdialogs --disable-infobars --hide-scrollbars \
     --disable-pinch --overscroll-history-navigation=0 \

@@ -9,3 +9,19 @@ env/
 .claude/
 node_modules/
 .env
+
+# downloaded test footage + local yt-dlp binary
+Vision Lab/footage/
+scripts/.bin/
+*.mp4
+*.mov
+*.log
+
+# self-training artifacts (regenerable; large)
+Vision Lab/dataset/
+Vision Lab/runs/
+Vision Lab/weights/
+datasets/
+
+# Ultralytics Platform local cache (pulled via ul:// — contains dataset exports)
+sean/

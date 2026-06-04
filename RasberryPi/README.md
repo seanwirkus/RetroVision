@@ -1,6 +1,6 @@
 # Car Cluster (Raspberry Pi)
 
-Complete dashboard UI for the **GeeekPi 11.26" 1920×480** HDMI touch panel,
+Complete dashboard UI for the **GeeekPi 11.26" 1920×440** HDMI touch panel,
 driven by a **Raspberry Pi 3B+**, fed by the **ESP32-C3 sensor hub** over USB serial.
 The cluster fuses the **ImprezaUI** WRX gauge skin with the **VisionLab** perception
 HUD into one screen.
@@ -12,7 +12,7 @@ ESP32-C3 (RPM, speed, fuel, temp, lights)
 serial_bridge.py  ──  FastAPI: serves web/ + telemetry on /ws
    │  WebSocket JSON
    ▼                                    off-Pi machine (laptop / mini-PC)
-web/  ──  Chromium kiosk 1920×480   ◀── VisionLab yolo_server.py (YOLO + camera)
+web/  ──  Chromium kiosk 1920×440   ◀── VisionLab yolo_server.py (YOLO + camera)
           ImprezaUI skin +               │  detections on /ws, MJPEG on /video_feed
           VisionLab perception HUD       └─ wired via VISION_WS in web/config.js
 ```
@@ -25,7 +25,7 @@ With no vision source the HUD still runs on telemetry and shows synthetic demo b
 | Path | Purpose |
 |------|---------|
 | `serial_bridge.py` | Reads C3 over USB serial → WebSocket JSON. Has `--demo`. |
-| `web/index.html` `web/style.css` | Cluster layout + WRX skin for 1920×480. |
+| `web/index.html` `web/style.css` | Cluster layout + WRX skin for 1920×440. |
 | `web/dashboard.js` | Ring gauges + VisionLab perception HUD + dual WebSocket. |
 | `web/config.js` | **Edit this:** gauge ranges + off-Pi `VISION_WS` / `VISION_MJPEG`. |
 | `web/_legacy/` | Pre-merge canvas UI (backup). |
@@ -69,12 +69,12 @@ python3 serial_bridge.py --demo
 ```
 `link`: `live` (fresh serial), `stale` (no data >1s), `demo` (synthetic).
 
-## Layout (1920×480)
+## Layout (1920×440)
 `[ left: SPEED ring + coolant/fuel ] · · · [ center: PERCEPTION HUD ] · · · [ right: TACH ring + gear + range/humidity ]`
 Center HUD = perspective lane with off-Pi detections, a forward-collision (TTC) banner,
 caution wedge, scan sweep, and an optional camera PiP. Tell-tales along the top; status
 row (telemetry link, vision source/fps, seq, clock) along the bottom. The whole UI is a
-fixed 1920×480 stage scaled to fit the panel.
+fixed 1920×440 stage scaled to fit the panel.
 
 ## Off-Pi vision (VisionLab)
 The Pi only renders detections; YOLO runs on a beefier machine.
@@ -168,7 +168,7 @@ If you want the absolute minimum image:
    ```bash
    bash ~/Documents/RaspberryPi/scripts/flash_setup.sh
    ```
-5. Reboot → dashboard auto-launches on the 1920×480 screen.
+5. Reboot → dashboard auto-launches on the 1920×440 screen.
 
 You do **not** need to touch ESP32-C3 firmware for Chromium boot time — that only
 affects sensor data over USB (`firmware_patch.md`).

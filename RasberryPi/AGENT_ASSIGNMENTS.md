@@ -3,17 +3,17 @@
 Four agents improve this driving-vision HUD in small, non-overlapping passes.
 **Rule: read this + AGENT_LOG.md + VISION_TELEMETRY_SCHEMA.md before editing. Edit only your files. Log every change.**
 
-## Two codebases, one contract
-This app spans two directories. The **contract** between them is the WebSocket JSON
-(`ws://<host>:8766/ws`) + the MJPEG stream (`http://<host>:8766/video_feed`).
+## Two codebases, one contract (RetroVision monorepo)
+This app spans two directories in **RetroVision**. The **contract** is WebSocket JSON
+(`ws://<host>:8766/ws`) + MJPEG (`http://<host>:8766/video_feed`).
 
 | Side | Path | Key files |
 |------|------|-----------|
-| **Backend** (vision) | `/Users/sean/Desktop/RetroView Ultra/vision-lab/` | `yolo_server.py`, `distance.py` |
-| **Frontend** (HUD) | `/Users/sean/Documents/RasberryPi/web/` | `dashboard.js`, `config.js`, `index.html`, `style.css` |
-| **Coordination** | `/Users/sean/Documents/RasberryPi/` | the `*.md` docs below |
+| **Backend** (vision) | `Vision Lab/` | `yolo_server.py`, `distance.py` |
+| **Frontend** (HUD) | `RasberryPi/web/` | `dashboard.js`, `config.js`, `index.html`, `style.css` |
+| **Coordination** | `RasberryPi/` | `AGENT_*.md`, `ROADMAP.md`, `VISION_TELEMETRY_SCHEMA.md`, `TEST_PLAN.md` |
 
-Models live in vision-lab: `yolov8n.pt`, `traffic-light-detection.pt`, `carparts-seg.pt`, `lpr-v1.pt`.
+Models live in `Vision Lab/`: `yolov8n.pt`, `traffic-light-detection.pt`, `carparts-seg.pt`, `lpr-v1.pt`.
 
 ## Ownership
 
@@ -30,17 +30,26 @@ Edits: `web/dashboard.js`, `web/style.css`, `web/index.html`, `web/config.js`, f
 **Does NOT** edit `yolo_server.py` (read telemetry shape only).
 
 ### ANTIGRAVITY — integration / testing / dev workflow
-Edits: `scripts/`, `tests/`, launch/env files, health-check + perf scripts, README run/dev sections, watchdog/restart helpers.
-**Does NOT** edit `yolo_server.py` or `dashboard.js` unless assigned a specific bug.
+Edits: repo-root `scripts/` (start, smoke, health checks), `tests/`, root `README.md` run/dev sections,
+`RasberryPi/scripts/` (Pi kiosk/deploy only). **Does NOT** edit `yolo_server.py` or `dashboard.js`
+unless assigned a specific bug.
 
 All agents: may **read** everything; must not **edit** unowned files; must log changes.
 
 ## Schema-change protocol
-A telemetry field change is a contract change. **Update `VISION_TELEMETRY_SCHEMA.md` first**
-(Claude approves), then Codex emits, then Cursor consumes. Changes must be **additive +
-backward-compatible** so the running app never breaks mid-migration.
+A telemetry field change is a contract change. **Claude owns** `VISION_TELEMETRY_SCHEMA.md`,
+`ROADMAP.md`, and assignment docs unless explicitly delegated. **Update the schema first**, then
+Codex emits, then Cursor consumes. **Antigravity** owns integration/scripts only — not schema or
+vision logic. Changes must be **additive + backward-compatible** so the running app never breaks
+mid-migration.
 
-## Run state (as of PASS 0)
-Backend launched from vision-lab: `VISION_SOURCE=window WINDOW_MATCH=YouTube python3 yolo_server.py`.
-Frontend served from `web/`: `python3 -m http.server 8000`. Open `http://localhost:8000/?visionHost=localhost`.
-No git repo in RasberryPi — coordinate via these docs, not commits.
+## Run state (dev)
+```bash
+# from repo root — starts backend + HUD (see scripts/start_app.sh)
+./scripts/start_app.sh
+
+# health check (backend must be running)
+./scripts/smoke_test.sh
+# open http://localhost:8000/?visionHost=127.0.0.1
+```
+Git repo: **RetroVision** (root). Coordinate via these docs + `AGENT_LOG.md` append-only entries.

@@ -11,10 +11,47 @@ const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const lerp = (a, b, t) => a + (b - a) * t;
 const $ = id => document.getElementById(id);
 
-/* ---------------- stage scaling (fit 1920x480 to the panel) ---------------- */
+/* ---------------- stage scaling (fit 1920x440 to the panel) ---------------- */
 const stage = $('stage');
 let stageScale = 1;
+
+/* ---- clean / recording mode ----
+ * ?clean=1 (or ?feed) hides the gauges, status bar and bezel and lets the
+ * perception video fill the whole window — so a screen-recording crop is just
+ * the video, at whatever aspect you resize the window to. Toggle live with "c". */
+function isClean() { return document.body.classList.contains('clean'); }
+(function initCleanMode() {
+  const qp = new URLSearchParams(location.search);
+  if (qp.get('clean') === '1' || qp.has('feed')) document.body.classList.add('clean');
+})();
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'c' || e.key === 'C') {
+    document.body.classList.toggle('clean');
+    fit();
+  }
+});
+
+/* LITE profile — Raspberry Pi 3B+ / low-power kiosk. Drops the heavy canvas work
+ * (per-frame gradients, occluder clip), caps the render rate, and disables CSS
+ * filters. Force with ?lite=1 / ?lite=0; otherwise auto-detect a Pi-class device. */
+const LITE = (() => {
+  const qp = new URLSearchParams(location.search);
+  if (qp.get('lite') === '1') return true;
+  if (qp.get('lite') === '0') return false;
+  const dm = navigator.deviceMemory || 8;
+  const hc = navigator.hardwareConcurrency || 8;
+  return dm <= 2 && hc <= 4;   // ~Pi 3B+ (1GB, 4 cores)
+})();
+if (LITE) document.body.classList.add('lite');
+
 function fit() {
+  if (isClean()) {
+    // panel fills the window via CSS; no 1920x440 letterbox scaling.
+    stageScale = 1;
+    stage.style.transform = 'none';
+    resizeCanvas();
+    return;
+  }
   stageScale = Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H);
   stage.style.transform = `translate(-50%,-50%) scale(${stageScale})`;
   resizeCanvas();
@@ -133,7 +170,20 @@ const shown = { mph: 0, rpm: 0 };
 const VISION_HOSTS = (Array.isArray(CFG.VISION_HOSTS) && CFG.VISION_HOSTS.length)
   ? CFG.VISION_HOSTS
   : (CFG.VISION_HOST ? [CFG.VISION_HOST] : []);
-const vision = { dets: [], tracks: new Map(), lastRx: 0, fps: 0, configured: VISION_HOSTS.length > 0, host: null };
+const vision = {
+  dets: [], tracks: new Map(), lastRx: 0, fps: 0, backendFps: 0,
+  configured: VISION_HOSTS.length > 0, host: null, packetStale: false,
+  laneConf: null, laneSource: null, schemaV: null,
+};
+
+/* Lane display: EMA-smooth backend points; blend vision ↔ synthetic fallback. */
+const LANE_PT_EMA = 0.38;
+const LANE_BLEND_SPEED = 0.14;
+const LANE_CONF_SHOW = 0.45;
+const LANE_CONF_STRONG = 0.62;
+let laneSmooth = { left: null, right: null, center: null };
+let laneBlend = 0;
+let horizonHold = null;   // sticky lane vanishing-point Y (camera px) for the horizon
 
 /* ---------------- object tracking + smoothing (the Tesla glide) ----------------
  * Server emits a stable id per object (ByteTrack). We EMA-smooth each track's
@@ -144,14 +194,14 @@ const TRACK_TTL_MS = 600;    // keep a vanished track this long while it fades
 function updateTracks(raw, now) {
   const tr = vision.tracks, seen = new Set();
   for (const o of raw) {
-    const key = o.id || `${o.cls}:${Math.round(o.xRelM || 0)}:${Math.round(o.distM || 0)}`;
+    const key = o.id || (o.tid != null ? `T${o.tid}` : `${o.cls}:${Math.round(o.xRelM || 0)}:${Math.round(o.distM || 0)}`);
     seen.add(key);
     let t = tr.get(key);
     if (!t) { t = { key, dx: o.xRelM || 0, dd: o.distM ?? 30, alpha: 0 }; tr.set(key, t); }
     t.dx += ((o.xRelM ?? t.dx) - t.dx) * TRACK_ALPHA;
     t.dd += ((o.distM ?? t.dd) - t.dd) * TRACK_ALPHA;
     t.cls = o.cls; t.state = o.state; t.conf = o.conf; t.bbox = o.bbox;
-    if (o.orient) t.orient = o.orient;
+    if (o.orient || o.orientation) t.orient = o.orient || o.orientation;
     if (o.plate) t.plate = o.plate;
     t.lastSeen = now;
     t.alpha = Math.min(1, t.alpha + 0.18);
@@ -238,17 +288,27 @@ function connectVision(hostIndex = visionHostAttempt) {
       // VisionLab emits {class, xRelM, distM, conf, state, bbox, plate}; keep bbox+plate
       // to draw boxes/crosshairs/plates aligned to the real camera image.
       const raw = (Array.isArray(d.detections) ? d.detections : []).map(o => ({
-        id: o.id, tid: o.tid, cls: o.cls || o.class, xRelM: o.xRelM, distM: o.distM,
-        conf: o.conf, state: o.state, bbox: o.bbox, plate: o.plate, orient: o.orient,
+        id: o.id, tid: o.tid, cls: o.cls || o.class, xRelM: o.xRelM, distM: o.distM ?? o.distance_ft,
+        conf: o.conf, state: o.state, bbox: o.bbox, plate: o.plate,
+        orient: o.orient || o.orientation,
       }));
       vision.dets = raw;
       updateTracks(raw, performance.now());
       if (d.camera) { vision.camW = d.camera.width || vision.camW; vision.camH = d.camera.height || vision.camH; }
-      vision.lanes = d.lanes || null;   // real detected lane lines (camera-space pts)
+      vision.lanes = d.lanes || null;
+      vision.laneConf = d.lanes?.confidence ?? null;
+      vision.laneSource = d.lanes?.source ?? null;
+      vision.schemaV = d.v ?? vision.schemaV;
+      vision.packetStale = d.stale === true;
+      if (typeof d.fps === 'number') vision.backendFps = d.fps;
       vision.lastRx = performance.now();
       frames++;
       const dt = (vision.lastRx - t0) / 1000;
-      if (dt >= 1) { vision.fps = Math.round(frames / dt); frames = 0; t0 = vision.lastRx; }
+      if (dt >= 1) {
+        vision.fps = Math.round(frames / dt);
+        frames = 0;
+        t0 = vision.lastRx;
+      }
     } catch {}
   };
   ws.onclose = () => {
@@ -356,9 +416,20 @@ const ctx = hud.getContext('2d');
 let HW = 0, HH = 0; // logical (css px) size
 function resizeCanvas() {
   const r = hud.getBoundingClientRect();
+  if (isClean()) {
+    // Full-window video: logical size = on-screen size, backing store at
+    // device resolution (capped at 2x) so the recording stays crisp.
+    HW = Math.max(1, r.width);
+    HH = Math.max(1, r.height);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    hud.width = Math.round(HW * dpr);
+    hud.height = Math.round(HH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return;
+  }
   HW = Math.max(1, r.width / stageScale);   // back out the stage transform
   HH = Math.max(1, r.height / stageScale);
-  // Force DPR=1 — Pi panel is exactly 1920x480, no retina needed.
+  // Force DPR=1 — Pi panel is exactly 1920x440, no retina needed.
   // Halves the pixel count vs DPR=2, massive perf win on Pi 3B+.
   const dpr = stageScale;
   hud.width = Math.round(HW * dpr);
@@ -550,39 +621,202 @@ function drawDetection(d, danger) {
   ctx.restore();
 }
 
-/* Real lane lines detected in the video, mapped camera-space → panel (object-fit:cover). */
-function drawLanes(lanes) {
+function smoothLaneSeg(prev, next) {
+  if (!next || next.length < 2) return prev;
+  // server now sends N-point curves; EMA per-point when the sampling matches,
+  // otherwise snap to the new shape.
+  if (!prev || prev.length !== next.length) return next.map(p => [...p]);
+  return next.map((p, i) => [
+    lerp(prev[i][0], p[0], LANE_PT_EMA),
+    lerp(prev[i][1], p[1], LANE_PT_EMA),
+  ]);
+}
+
+/* Clip a camera-space polyline to the horizon: keep points at or below it (larger
+ * y = nearer), interpolate the crossing, and drop everything above. Lanes are
+ * ordered bottom -> top, so we can stop at the first point past the horizon. */
+function clipPolyToHorizon(seg, hY) {
+  if (!seg || seg.length < 2) return null;
+  const out = [];
+  for (const p of seg) {
+    if (p[1] >= hY) { out.push([p[0], p[1]]); continue; }
+    const prev = out.length ? out[out.length - 1] : null;
+    if (prev) {
+      const t = (hY - prev[1]) / (p[1] - prev[1]);
+      out.push([prev[0] + (p[0] - prev[0]) * t, hY]);
+    }
+    break;
+  }
+  return out.length >= 2 ? out : null;
+}
+
+function updateLaneSmooth(lanes) {
   if (!lanes) return;
+  if (lanes.left) laneSmooth.left = smoothLaneSeg(laneSmooth.left, lanes.left);
+  if (lanes.right) laneSmooth.right = smoothLaneSeg(laneSmooth.right, lanes.right);
+  if (lanes.center) laneSmooth.center = smoothLaneSeg(laneSmooth.center, lanes.center);
+}
+
+function laneConfidence(lanes) {
+  if (!lanes) return 0;
+  if (lanes.source === 'none') return 0;
+  if (typeof lanes.confidence === 'number') return clamp(lanes.confidence, 0, 1);
+  if (lanes.source === 'fallback') return clamp(lanes.confidence ?? 0.25, 0, 1);
+  const hasL = !!(lanes.left?.length >= 2);
+  const hasR = !!(lanes.right?.length >= 2);
+  if (hasL && hasR) return 0.55;
+  if (hasL || hasR) return 0.28;
+  return 0;
+}
+
+/* Smooth quadratic stroke through a polyline (midpoint curve) — nicer than
+ * straight lineTo segments for curved lanes. pts are already panel-space. */
+function strokeSmooth(pts) {
+  if (pts.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2;
+    ctx.quadraticCurveTo(pts[i][0], pts[i][1], mx, my);
+  }
+  const n = pts.length - 1;
+  ctx.lineTo(pts[n][0], pts[n][1]);
+  ctx.stroke();
+}
+
+function drawLaneSeg(seg, mp, { glowA, lineA, lineW, dashed = false }) {
+  if (!seg || seg.length < 2) return;
+  const path = seg.map(mp);
+  if (dashed) ctx.setLineDash([6, 10]);
+  ctx.strokeStyle = `rgba(70,190,255,${glowA})`; ctx.lineWidth = lineW + 6; strokeSmooth(path);
+  ctx.strokeStyle = `rgba(165,228,255,${lineA})`; ctx.lineWidth = lineW; strokeSmooth(path);
+  if (dashed) ctx.setLineDash([]);
+}
+
+/* Real lane lines (camera px → panel). alpha scales fade; tentative = dashed/muted.
+ * horizonCamY (camera px) clips the lines so nothing renders above the horizon. */
+function drawLanes(lanes, { alpha = 1, tentative = false, horizonCamY = null } = {}) {
+  if (!lanes || alpha < 0.02) return;
   const vw = vision.camW || 1280, vh = vision.camH || 720;
   const scale = Math.max(HW / vw, HH / vh), offX = (HW - vw * scale) / 2, offY = (HH - vh * scale) / 2;
   const mp = ([x, y]) => [x * scale + offX, y * scale + offY];
+  const clip = (s) => (horizonCamY == null ? s : clipPolyToHorizon(s, horizonCamY));
+  const a = clamp(alpha, 0, 1);
+  const glowA = (tentative ? 0.08 : 0.22) * a;
+  const lineA = (tentative ? 0.38 : 0.95) * a;
+  const lineW = tentative ? 2.5 : 3.5;
   ctx.save();
-  ctx.lineCap = 'round';
-  for (const side of ['left', 'right']) {
-    const seg = lanes[side];
-    if (!seg) continue;
-    const a = mp(seg[0]), b = mp(seg[1]);
-    ctx.strokeStyle = 'rgba(70,190,255,0.22)'; ctx.lineWidth = 10;
-    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
-    ctx.strokeStyle = 'rgba(165,228,255,0.95)'; ctx.lineWidth = 3.5;
-    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (tentative) ctx.setLineDash([10, 14]);
+  for (const side of ['left', 'right']) drawLaneSeg(clip(lanes[side]), mp, { glowA, lineA, lineW });
+  if (lanes.center?.length >= 2 && !tentative) {
+    drawLaneSeg(clip(lanes.center), mp, {
+      glowA: 0.06 * a, lineA: 0.32 * a, lineW: 1.5, dashed: true,
+    });
   }
   ctx.restore();
 }
 
-/* Ego "you are here" vehicle pinned at the bottom-centre of the HUD. */
-function drawEgo() {
-  const cx = HW / 2, by = HH * 0.99, w = HW * 0.09, h = w * 0.46;
+/* object-fit:cover mapping from camera pixels → panel pixels. Identical to the
+ * transform the browser applies to the MJPEG <img>, so anything drawn through
+ * this maps exactly onto the live video. */
+function camCover() {
+  const vw = vision.camW || camFeed.naturalWidth || 1280;
+  const vh = vision.camH || camFeed.naturalHeight || 720;
+  const scale = Math.max(HW / vw, HH / vh);
+  const offX = (HW - vw * scale) / 2, offY = (HH - vh * scale) / 2;
+  return { vw, vh, mp: (p) => [p[0] * scale + offX, p[1] * scale + offY] };
+}
+
+/* Intersection of two line segments extended to infinite lines (the lane
+ * vanishing point). Returns [x,y] in the same coords, or null if ~parallel. */
+function lineIntersect(a, b) {
+  const [[x1, y1], [x2, y2]] = a, [[x3, y3], [x4, y4]] = b;
+  const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+  if (Math.abs(den) < 1e-6) return null;
+  const px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
+  const py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
+  return [px, py];
+}
+
+/* Realtime street map locked to the video: drivable road fill between the two
+ * detected lane edges, a horizon line at the lane vanishing height, and the
+ * lane lines themselves. Tinted by FCW level. */
+/* Clip the canvas to "whole panel minus the detection boxes" so anything drawn
+ * after (road fill, lanes, horizon) passes BEHIND the objects — giving depth:
+ * cars/signs sit on top of the road instead of the lanes painting over them. */
+function applyOccluderClip(dets) {
+  if (!dets || !dets.length) return;
+  const vw = vision.camW || camFeed.naturalWidth || 1280;
+  const vh = vision.camH || camFeed.naturalHeight || 720;
+  const scale = Math.max(HW / vw, HH / vh);
+  const offX = (HW - vw * scale) / 2, offY = (HH - vh * scale) / 2;
+  ctx.beginPath();
+  ctx.rect(0, 0, HW, HH);
+  for (const d of dets) {
+    if (!Array.isArray(d.bbox) || d.bbox.length < 4) continue;
+    const x1 = d.bbox[0] * scale + offX, y1 = d.bbox[1] * scale + offY;
+    const x2 = d.bbox[2] * scale + offX, y2 = d.bbox[3] * scale + offY;
+    const ix = (x2 - x1) * 0.05, iy = (y2 - y1) * 0.05;   // tuck just inside the silhouette
+    ctx.rect(x1 + ix, y1 + iy, (x2 - x1) - 2 * ix, (y2 - y1) - 2 * iy);
+  }
+  ctx.clip('evenodd');   // outer rect minus the boxes
+}
+
+function drawStreetMap(now, fcw, dets) {
+  const { vw, vh, mp } = camCover();
+  const L = laneSmooth.left, R = laneSmooth.right;
+  const topSeg = (s) => [s[s.length - 2], s[s.length - 1]];  // far end of the curve
+
+  // horizon = lane vanishing point (far segments extended to their intersection),
+  // sticky so it holds steady when the right lane drops out frame to frame.
+  if (L && R && L.length >= 2 && R.length >= 2) {
+    const vp = lineIntersect(topSeg(L), topSeg(R));
+    if (vp && vp[1] > vh * 0.15 && vp[1] < vh * 0.85) {
+      horizonHold = horizonHold == null ? vp[1] : lerp(horizonHold, vp[1], 0.15);
+    }
+  }
+  const horizonCamY = horizonHold != null ? horizonHold : vh * (CFG.HUD_HORIZON_FRAC ?? 0.45);
+
+  const col = fcw.level === 2 ? '244,63,94' : fcw.level === 1 ? '250,204,21' : '34,211,238';
   ctx.save();
-  ctx.shadowColor = 'rgba(40,160,255,0.85)'; ctx.shadowBlur = 18;
-  ctx.fillStyle = '#1e90ff';
-  rrect(cx - w / 2, by - h, w, h, h * 0.32); ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = 'rgba(255,255,255,0.20)';
-  rrect(cx - w * 0.3, by - h * 0.92, w * 0.6, h * 0.42, h * 0.22); ctx.fill();
-  ctx.fillStyle = 'rgba(255,70,70,0.9)';
-  ctx.fillRect(cx - w * 0.4, by - h * 0.5, w * 0.12, h * 0.18);
-  ctx.fillRect(cx + w * 0.28, by - h * 0.5, w * 0.12, h * 0.18);
+  if (!LITE) applyOccluderClip(dets);   // depth: road + lanes behind objects (Mac only)
+
+  // drivable surface between the curved lane edges, clipped to the horizon so it
+  // never bleeds into the sky. Follows both curves, not a flat trapezoid.
+  const lc = clipPolyToHorizon(L, horizonCamY), rc = clipPolyToHorizon(R, horizonCamY);
+  if (lc && rc) {
+    const left = lc.map(mp), right = rc.map(mp);
+    // flat fill on Pi (no per-frame gradient object), gradient on Mac
+    if (LITE) {
+      ctx.fillStyle = `rgba(${col},0.12)`;
+    } else {
+      const allY = [...left, ...right].map(p => p[1]);
+      const g = ctx.createLinearGradient(0, Math.min(...allY), 0, Math.max(...allY));
+      g.addColorStop(0, `rgba(${col},0.02)`);
+      g.addColorStop(1, `rgba(${col},0.20)`);
+      ctx.fillStyle = g;
+    }
+    ctx.beginPath();
+    ctx.moveTo(left[0][0], left[0][1]);
+    for (let i = 1; i < left.length; i++) ctx.lineTo(left[i][0], left[i][1]);
+    for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i][0], right[i][1]);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // horizon line across the frame
+  const hy = mp([0, horizonCamY])[1];
+  ctx.strokeStyle = `rgba(${col},0.32)`; ctx.lineWidth = 1.25;
+  ctx.setLineDash([14, 12]);
+  ctx.beginPath(); ctx.moveTo(0, hy); ctx.lineTo(HW, hy); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.font = '600 11px "SF Pro Rounded", system-ui, sans-serif';
+  ctx.fillStyle = `rgba(${col},0.55)`;
+  ctx.fillText('HORIZON', 12, hy - 6);
+
+  // lane edges — curved, clipped to the horizon, and (via the occluder clip above)
+  // hidden behind detected objects so the crosshairs read as in front.
+  drawLanes(laneSmooth, { alpha: 1, tentative: false, horizonCamY });
   ctx.restore();
 }
 
@@ -896,7 +1130,7 @@ const FCW_COLORS = [
 /* ---------------- main render loop (30fps cap for Pi 3B+) ---------------- */
 let last = performance.now();
 let lastSpeed = -1, lastRpm = -1, lastGear = '', lastLink = '';
-const FRAME_BUDGET = 1000 / 30;  // 33ms = 30fps cap
+const FRAME_BUDGET = 1000 / (LITE ? 20 : 30);  // Pi 3B+ renders at 20fps, Mac at 30
 function frame(now) {
   requestAnimationFrame(frame);
   if (now - last < FRAME_BUDGET) return;  // skip frame if too soon
@@ -937,7 +1171,7 @@ function frame(now) {
 
   /* --- vision source selection --- */
   const visAge = (now - vision.lastRx) / 1000;
-  const visLive = vision.configured && visAge < 1.0;
+  const visLive = vision.configured && visAge < 1.2 && !vision.packetStale;
   let dets, vmode;
   if (visLive) { dets = trackedDets(now); vmode = 'live'; }
   else if (!vision.configured) { dets = demoDetections(now); vmode = 'demo'; }
@@ -964,20 +1198,49 @@ function frame(now) {
   camFeed.classList.toggle('on', camOn);
   if (camTag) camTag.style.display = camOn ? 'block' : 'none';
 
-  // Always draw the full synthetic road + 3D detection markers.
-  // When the camera is on, the faint (10%) video shows through underneath.
-  // real detected lanes when the camera is live; fixed synthetic road otherwise
-  const useRealLanes = camOn && visLive && vision.lanes;
-  if (useRealLanes) drawLanes(vision.lanes);
-  else drawRoad(FCW_COLORS[fcw.level], now);
-  drawEgoPath(now, fcw.level);
-  const sorted = [...dets].sort((a, b) => (b.distM ?? 0) - (a.distM ?? 0)); // far first
-  for (const d of sorted) drawDetection(d, fcw.danger.has(d));
+  // Lane tracking: camera-space polylines from the server, EMA-smoothed.
+  const laneConf = laneConfidence(vision.lanes);
+  const visionLaneOk = visLive && vision.lanes && laneConf > 0.10
+    && vision.laneSource !== 'none' && vision.lanes?.source !== 'none';
+  if (visionLaneOk) updateLaneSmooth(vision.lanes);
 
-  // When camera is live, also overlay tracking boxes + crosshairs + plates
-  // aligned to the real video coordinates on top of the 3D markers.
   if (camOn) {
+    // ---- AR mode: everything locked to the real video pixels ----
+    // Realtime street map (road + lanes + horizon), then YOLO tracking boxes
+    // sitting on the actual objects. No synthetic top-down — it never tracks.
+    drawStreetMap(now, fcw, dets);
     drawCameraOverlay(dets, fcw.danger);
+    if (visionLaneOk) {
+      laneBlend = 1;
+    } else {
+      laneBlend = lerp(laneBlend, 0, LANE_BLEND_SPEED * 2);  // let lanes fade, don't freeze
+      if (laneBlend < 0.06) laneSmooth = { left: null, right: null, center: null };
+    }
+  } else {
+    // ---- synthetic top-down HUD: demo / no camera ----
+    const targetBlend = visionLaneOk ? clamp(laneConf, 0, 1) : 0;
+    laneBlend = lerp(laneBlend, targetBlend, LANE_BLEND_SPEED);
+    const showVision = laneBlend > 0.04 && (laneSmooth.left || laneSmooth.right);
+    const tentative = laneConf < LANE_CONF_SHOW || vision.laneSource === 'fallback';
+    const fallbackRoad = !showVision || laneBlend < 0.98;
+    if (fallbackRoad) {
+      ctx.save();
+      ctx.globalAlpha = tentative ? 0.72 : (1 - laneBlend * (showVision ? 1 : 0));
+      drawRoad(FCW_COLORS[fcw.level], now);
+      ctx.restore();
+    }
+    if (showVision) {
+      drawLanes(laneSmooth, { alpha: laneBlend, tentative });
+    } else if (!visionLaneOk) {
+      laneBlend = lerp(laneBlend, 0, LANE_BLEND_SPEED * 2);
+      if (laneBlend < 0.06) laneSmooth = { left: null, right: null, center: null };
+    }
+    ctx.save();
+    ctx.globalAlpha = 1 - laneBlend * (laneConf >= LANE_CONF_STRONG ? 0.7 : 0.45);
+    drawEgoPath(now, fcw.level);
+    ctx.restore();
+    const sorted = [...dets].sort((a, b) => (b.distM ?? 0) - (a.distM ?? 0)); // far first
+    for (const d of sorted) drawDetection(d, fcw.danger.has(d));
   }
 
   /* --- turn signals + tells --- */
@@ -996,7 +1259,11 @@ function frame(now) {
   }
 
   /* --- vision chip + status --- */
-  const vTxt = vmode === 'live' ? `LIVE ${vision.fps}fps` : vmode === 'demo' ? 'DEMO VISION' : 'VISION STALE';
+  const fpsN = Math.round(vision.backendFps ?? vision.fps) || 0;
+  let vTxt = vmode === 'live' ? `LIVE ${fpsN}fps` : vmode === 'demo' ? 'DEMO VISION' : 'VISION STALE';
+  if (vmode === 'live' && laneConf >= 0.2) {
+    vTxt += ` · lanes ${Math.round(laneConf * 100)}%`;
+  }
   const vCol = vmode === 'live' ? '#34d058' : vmode === 'demo' ? '#ffb020' : '#ff3b30';
   if (elVsrcText.textContent !== vTxt) {
     elVsrcText.textContent = vTxt;

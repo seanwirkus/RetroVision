@@ -1,5 +1,5 @@
 /* WRX cluster — VisionLab perception HUD fused with the ImprezaUI gauge skin.
- * Design canvas: 1920x480 (GeeekPi 11.26"). Everything is sized in px to the
+ * Design canvas: 1920x440 (GeeekPi 11.26"). Everything is sized in px to the
  * base canvas; #stage is scaled to fit the real panel by dashboard.js. */
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -38,7 +38,7 @@ html, body {
 /* fixed stage, scaled by JS (transform set inline) */
 #stage {
   position: absolute; left: 50%; top: 50%;
-  width: 1920px; height: 480px;
+  width: 1920px; height: 440px;
   transform-origin: center center;
   will-change: transform;
 }
@@ -47,8 +47,8 @@ html, body {
   position: relative;
   width: 100%; height: 100%;
   background: radial-gradient(120% 140% at 50% -20%, #0a0d12 0%, #000 60%);
-  display: flex; align-items: center; gap: 20px;
-  padding: 22px 30px 14px;
+  display: flex; align-items: center; gap: 18px;
+  padding: 18px 28px 12px;
 }
 
 /* ---------- top tell-tales ---------- */
@@ -69,18 +69,18 @@ html, body {
 .side {
   width: 440px; flex-shrink: 0;
   display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 6px;
+  justify-content: center; gap: 5px;
 }
 
 /* main ring gauge (SVG injected by JS) */
-.ring { position: relative; width: 330px; height: 330px; }
+.ring { position: relative; width: 306px; height: 306px; }
 .ring svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .ring-center {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; pointer-events: none;
 }
-.ring-val { font-size: 88px; line-height: .88; font-weight: 700; letter-spacing: 1px; }
-.ring-unit { font-size: 18px; font-weight: 600; color: var(--muted); letter-spacing: 2px; margin-top: 4px; }
+.ring-val { font-size: 80px; line-height: .88; font-weight: 700; letter-spacing: 1px; }
+.ring-unit { font-size: 16px; font-weight: 600; color: var(--muted); letter-spacing: 2px; margin-top: 3px; }
 .left  .ring-val { color: #fff; text-shadow: 0 0 26px rgba(0,255,32,.30); }
 .right .ring-val { color: #fff; text-shadow: 0 0 26px rgba(255,42,42,.26); }
 
@@ -111,16 +111,16 @@ html, body {
   position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
   display: inline-flex; align-items: center; justify-content: center;
 }
-.gearchip img { width: 56px; height: 56px; display: block; filter: drop-shadow(0 0 8px rgba(40,124,251,.5)); }
+.gearchip img { width: 52px; height: 52px; display: block; filter: drop-shadow(0 0 8px rgba(40,124,251,.5)); }
 .gearchip b {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%,-54%);
-  font-size: 30px; font-weight: 700; color: var(--blue);
+  font-size: 28px; font-weight: 700; color: var(--blue);
   text-shadow: 0 0 10px rgba(40,124,251,.8);
 }
 
 /* progress bar under each ring */
 .bar {
-  position: relative; width: 300px; height: 10px;
+  position: relative; width: 286px; height: 9px;
   border-radius: 10px; overflow: hidden;
   background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);
 }
@@ -131,42 +131,44 @@ html, body {
 .bar .fill.red   { background: linear-gradient(90deg,#7a1010,var(--redline)); box-shadow: 0 0 12px rgba(255,7,7,.5); }
 
 /* mini gauges row */
-.minis { display: flex; gap: 18px; justify-content: center; margin-top: 2px; }
-.gauge { position: relative; width: 80px; height: 80px; }
+.minis { display: flex; gap: 16px; justify-content: center; margin-top: 1px; }
+.gauge { position: relative; width: 72px; height: 72px; }
 .gauge svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .gauge .gval {
-  position: absolute; left: 0; right: 0; top: 26px; text-align: center;
-  font-size: 18px; font-weight: 700; color: #fff;
+  position: absolute; left: 0; right: 0; top: 23px; text-align: center;
+  font-size: 16px; font-weight: 700; color: #fff;
 }
 .gauge .gname {
-  position: absolute; bottom: 4px; left: 0; right: 0; text-align: center;
-  font-size: 10px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase;
+  position: absolute; bottom: 3px; left: 0; right: 0; text-align: center;
+  font-size: 9px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase;
 }
 
 /* ---------- center: perception HUD ---------- */
 .center {
   flex: 1 1 0;
   min-width: 0;
-  height: 422px;
-  min-height: 422px;
+  height: 392px;
+  min-height: 392px;
   align-self: center;
   display: flex;
 }
 .panel {
-  position: relative; flex: 1 1 0; height: 100%; min-height: 422px;
+  position: relative; flex: 1 1 0; height: 100%; min-height: 392px;
   background: var(--glass); border: 1px solid rgba(255,255,255,.07);
-  border-radius: 38px; overflow: hidden;
+  border-radius: 32px; overflow: hidden;
   box-shadow: inset 0 0 80px rgba(0,0,0,.6);
 }
 #hud { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; will-change: contents; }
 /* live off-Pi camera feed (already YOLO-annotated) filling the HUD */
-.cambg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; z-index: 0; opacity: 0; filter: saturate(1.18) contrast(1.06) brightness(1.02); transition: opacity .15s; will-change: opacity; }
-.cambg.on { opacity: .10; }
+.cambg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; z-index: 0; opacity: 0; filter: saturate(1.12) contrast(1.04); transition: opacity .15s; will-change: opacity; }
+/* live feed is the picture now — overlays (lanes/horizon/boxes) are drawn on the
+ * canvas above it and tracked to these exact pixels via object-fit:cover. */
+.cambg.on { opacity: 1; }
 
 /* turn-signal chevrons over the HUD edges */
 .turn {
   position: absolute; top: 50%; transform: translateY(-50%);
-  font-size: 120px; line-height: 1; font-weight: 700; color: #161b16; z-index: 3;
+  font-size: 108px; line-height: 1; font-weight: 700; color: #161b16; z-index: 3;
   transition: color .08s, text-shadow .08s;
 }
 .turn-l { left: 24px; } .turn-r { right: 24px; }
@@ -174,7 +176,7 @@ html, body {
 
 /* off-Pi camera PiP */
 .campip {
-  position: absolute; right: 18px; bottom: 16px; width: 240px; height: 135px;
+  position: absolute; right: 16px; bottom: 12px; width: 218px; height: 123px;
   border-radius: 12px; overflow: hidden; z-index: 4;
   border: 1px solid rgba(34,211,238,.35); background: #050505;
   box-shadow: 0 0 22px rgba(0,0,0,.6); display: none;
@@ -189,14 +191,14 @@ html, body {
 
 /* forward-collision banner (top-center of HUD) */
 .fcw {
-  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 4;
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 4;
   display: flex; flex-direction: column; align-items: center; gap: 1px;
-  padding: 6px 18px; border-radius: 12px;
+  padding: 5px 16px; border-radius: 12px;
   background: rgba(8,12,10,.55); border: 1px solid rgba(52,211,153,.35);
   transition: border-color .15s, background .15s;
 }
-.fcw-state { font-size: 18px; font-weight: 800; letter-spacing: 2px; color: var(--green-soft); }
-.fcw-reason { font-size: 11px; color: var(--muted); letter-spacing: .5px; }
+.fcw-state { font-size: 17px; font-weight: 800; letter-spacing: 2px; color: var(--green-soft); }
+.fcw-reason { font-size: 10px; color: var(--muted); letter-spacing: .5px; }
 .fcw.warn   { border-color: rgba(250,204,21,.6);  background: rgba(40,32,4,.55); }
 .fcw.warn   .fcw-state { color: var(--amber); text-shadow: 0 0 12px rgba(250,204,21,.6); }
 .fcw.danger { border-color: rgba(244,63,94,.75);  background: rgba(40,6,12,.6); animation: fcwPulse .5s steps(2) infinite; }
@@ -205,7 +207,7 @@ html, body {
 
 /* vision source chip (bottom-left of HUD) */
 .vsrc {
-  position: absolute; left: 18px; bottom: 16px; z-index: 4;
+  position: absolute; left: 16px; bottom: 12px; z-index: 4;
   display: flex; align-items: center; gap: 8px;
   font-size: 12px; font-weight: 600; letter-spacing: 1px; color: var(--muted);
   padding: 6px 12px; border-radius: 12px; background: rgba(0,0,0,.4);
@@ -216,8 +218,37 @@ html, body {
 .statusbar {
   position: absolute; bottom: 4px; left: 0; right: 0; z-index: 5;
   display: flex; align-items: center; justify-content: center; gap: 10px;
-  font-size: 12px; color: #7c8aa0; letter-spacing: .5px;
+  font-size: 11px; color: #7c8aa0; letter-spacing: .5px;
 }
 .statusbar .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; box-shadow: 0 0 8px transparent; }
 .statusbar .sep { color: #3a4250; }
 .statusbar .clock { margin-left: 14px; color: #5d6470; }
+
+/* ---------- clean / recording mode (?clean=1 or press "c") ----------
+ * Only the perception video remains, filling the whole window so a screen
+ * recording crops to just the feed at whatever size you make the window. */
+body.clean #stage {
+  left: 0; top: 0; width: 100vw; height: 100vh;
+  transform: none !important;
+}
+body.clean #cluster { padding: 0; gap: 0; background: #000; }
+body.clean .side,
+body.clean .tells,
+body.clean .statusbar,
+body.clean .vsrc,
+body.clean .campip-tag { display: none; }
+body.clean .center {
+  height: 100%; min-height: 0; align-self: stretch;
+}
+body.clean .panel {
+  height: 100%; min-height: 0;
+  border: 0; border-radius: 0; box-shadow: none;
+}
+
+/* ---------- LITE profile (Raspberry Pi 3B+ kiosk) ----------
+ * CSS filters force GPU compositing every frame — expensive on the Pi's VideoCore.
+ * Drop them; the perception data is unchanged. */
+body.lite .cambg { filter: none; }
+body.lite .gearchip img { filter: none; }
+body.lite .ring.tach.redline { animation: none; }
+body.lite .left .ring-val, body.lite .right .ring-val { text-shadow: none; }
