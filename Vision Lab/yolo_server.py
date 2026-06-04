@@ -73,6 +73,15 @@ except Exception:
     DEVICE = os.environ.get("YOLO_DEVICE", "cpu")
 print(f"[vision] inference device: {DEVICE}", flush=True)
 
+# LITE mode: for low-RAM / CPU-only boxes (e.g. a 4GB 2012 MacBook). Loads ONLY
+# the main detector — skips the traffic-light, carparts, plate and char models —
+# and runs inference at a smaller imgsz. Cuts RAM from ~3-4GB to ~1-1.5GB.
+LITE = os.environ.get("LITE", "0") != "0"
+INFER_IMGSZ = int(os.environ.get("YOLO_IMGSZ", "416" if LITE else "640"))
+if LITE:
+    print("[vision] LITE mode: main detector only, imgsz="
+          f"{INFER_IMGSZ}", flush=True)
+
 # BASE_WEIGHTS lets you hot-swap in a self-trained model (see train_self.py).
 # Defaults to stock yolov8n.pt.
 _BASE_WEIGHTS = os.environ.get("BASE_WEIGHTS", "yolov8n.pt")
@@ -80,14 +89,18 @@ print(f"[vision] detector weights: {_BASE_WEIGHTS}", flush=True)
 model = YOLO(_BASE_WEIGHTS)
 model.to(DEVICE)
 # Dedicated traffic-light state model: classes {0:'green', 1:'red', 2:'yellow'}.
-light_model = YOLO("traffic-light-detection.pt")
-light_model.to(DEVICE)
+# Optional — loads if the weight exists and not in LITE mode.
+_LIGHT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "traffic-light-detection.pt")
+light_model = YOLO(_LIGHT_PATH) if (os.path.exists(_LIGHT_PATH) and not LITE) else None
+if light_model is not None:
+    light_model.to(DEVICE)
+    print("[vision] traffic-light model loaded", flush=True)
 LIGHT_STATE = {"green": "GREEN", "red": "RED", "yellow": "YELLOW"}
 LIGHT_BGR = {"RED": (0, 0, 255), "YELLOW": (0, 255, 255), "GREEN": (0, 255, 0)}
 
 # ---- car-parts segmentation → vehicle orientation (optional; loads if present) ----
 _PARTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "carparts-seg.pt")
-parts_model = YOLO(_PARTS_PATH) if os.path.exists(_PARTS_PATH) else None
+parts_model = YOLO(_PARTS_PATH) if (os.path.exists(_PARTS_PATH) and not LITE) else None
 if parts_model is not None:
     parts_model.to(DEVICE)
     print(f"[vision] carparts-seg loaded: {len(parts_model.names)} classes", flush=True)
@@ -109,7 +122,7 @@ _PLATE_PATHS = [os.environ.get("PLATE_WEIGHTS", ""), "anpr-2.pt",
                 "lpr-v1.pt", "plate-detector.pt"]
 _PLATE_PATHS = [p for p in _PLATE_PATHS if p]
 _plate_path = next((p for p in _PLATE_PATHS if os.path.exists(p)), None)
-plate_model = YOLO(_plate_path) if _plate_path else None
+plate_model = YOLO(_plate_path) if (_plate_path and not LITE) else None
 # Restrict detections to the plate class so junk labels (e.g. anpr-2's 'class1')
 # can't hijack the highest-conf pick. None = accept any class.
 _PLATE_CLASS_ID = None
@@ -125,7 +138,7 @@ if plate_model is not None:
 CHAR_OCR = os.environ.get("CHAR_OCR", "1") != "0"
 _CHAR_PATH = next((p for p in [os.environ.get("PLATE_CHARS_WEIGHTS", ""),
                                "plate-chars.pt"] if p and os.path.exists(p)), None)
-char_model = YOLO(_CHAR_PATH) if (CHAR_OCR and _CHAR_PATH) else None
+char_model = YOLO(_CHAR_PATH) if (CHAR_OCR and _CHAR_PATH and not LITE) else None
 CHAR_CONF_MIN = float(os.environ.get("CHAR_CONF_MIN", "0.40"))
 CHAR_UPSCALE_W = int(os.environ.get("CHAR_UPSCALE_W", "200"))  # upscale plate crop to >= this width
 if char_model is not None:
@@ -800,7 +813,7 @@ def camera_loop():
         used_tids = set()
         # .track() keeps persistent IDs across frames (ByteTrack) so the HUD can
         # smooth each car's motion instead of flickering — the Tesla-style glide.
-        results = model.track(frame, conf=CONF_MIN, persist=True,
+        results = model.track(frame, conf=CONF_MIN, persist=True, imgsz=INFER_IMGSZ,
                               tracker="bytetrack.yaml", verbose=False, device=DEVICE)
         # self-training: stash high-confidence detections as pseudo-labels.
         if collector is not None:
@@ -809,7 +822,7 @@ def camera_loop():
         # it every Nth frame and reuse the cached boxes between runs.
         _fc = getattr(camera_loop, "_fc", 0) + 1
         camera_loop._fc = _fc
-        if _fc % LIGHT_EVERY == 1:
+        if light_model is not None and _fc % LIGHT_EVERY == 1:
             _lr = light_model(frame, verbose=False, device=DEVICE)
             camera_loop._light_boxes = [
                 (bx.xyxy[0].tolist(), float(bx.conf[0]), int(bx.cls[0]))
