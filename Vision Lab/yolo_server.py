@@ -159,11 +159,14 @@ except Exception as e:
 
 VEHICLE_CLASSES = {"CAR", "TRUCK", "BUS"}
 # detection gates (env-tunable) — cut billboard / sky / low-conf false positives
-CONF_MIN = float(os.environ.get("CONF_MIN", "0.35"))        # global floor
+# LITE (weak CPU box) auto-tunes for MORE detection at the SAME speed: a lighter
+# MJPEG encode frees CPU cycles, which are spent on a bigger inference imgsz and
+# a lower confidence floor (more recall). All still env-overridable.
+CONF_MIN = float(os.environ.get("CONF_MIN", "0.28" if LITE else "0.35"))   # lower = catch more
 PED_CONF_MIN = float(os.environ.get("PED_CONF_MIN", "0.50"))  # ads fake "person"
 HORIZON_FRAC = float(os.environ.get("HORIZON_FRAC", "0.45"))  # reject above horizon
-MJPEG_MAX_W = int(os.environ.get("MJPEG_MAX_W", "720"))       # 720 = Pi-safe; raise for recording
-MJPEG_QUALITY = int(os.environ.get("MJPEG_QUALITY", "60"))
+MJPEG_MAX_W = int(os.environ.get("MJPEG_MAX_W", "480" if LITE else "720"))  # smaller = cheaper encode
+MJPEG_QUALITY = int(os.environ.get("MJPEG_QUALITY", "45" if LITE else "60"))
 LIGHT_EVERY = int(os.environ.get("LIGHT_EVERY", "3"))         # run the light model every Nth frame
 PLATE_RE = re.compile(r"[A-Z0-9]{5,8}")
 OCR_INTERVAL = 0.5  # seconds between OCR passes to keep fps high
@@ -759,7 +762,9 @@ def capture_loop():
     recorded video stays smooth even while YOLO runs slower in camera_loop."""
     global latest_frame, latest_raw, latest_raw_seq
 
-    cap_fps_env = float(os.environ.get("CAPTURE_FPS", "0") or 0)
+    # LITE caps the stream at 12fps by default so MJPEG encoding doesn't starve
+    # the detector on a weak CPU (the HUD looks fine at 12fps).
+    cap_fps_env = float(os.environ.get("CAPTURE_FPS", "12" if LITE else "0") or 0)
     if cap_fps_env > 1:
         interval = 1.0 / cap_fps_env          # explicit cap (e.g. 18 when feeding a Pi)
     elif VISION_SOURCE == "file":
