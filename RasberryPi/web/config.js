@@ -88,4 +88,27 @@ window.CLUSTER_CONFIG = {
   TTC_WARN_S: 4.0,      // amber
   TTC_DANGER_S: 2.0,    // red
   NEAR_WARN_FT: 22,     // amber if closer, regardless of TTC
+
+  // ---- Scene mode (generated retro driving scenes) ----
+  // A "less realtime, more visual" view: instead of frame-accurate perception,
+  // infer the driving type from telemetry + coarse vision and paint a stylised
+  // synthwave scene that matches it. Toggle live with "s"; force with ?scene=1/0.
+  SCENE_MODE_DEFAULT: true,   // start in scene mode (set false to default to the perception HUD)
+  SCENE: {
+    SCROLL_SPEED_REF: 60,     // mph that maps to full parallax flow
+    SWITCH_HOLD_MS: 2600,     // a new driving-type must lead this long before the scene switches
+    STAT_WINDOW_MS: 12000,    // rolling speed window for avg/variance/stop-fraction
+    HORIZON_FRAC: 0.52,       // horizon row as a fraction of panel height
+  },
+
+  // ---- Intersection timer (Urus-style countdown) ----
+  INTERSECTION: {
+    DEFAULT_RED_MS: 28000,    // assumed red-light length before the model has learned anything
+    STOP_HOLD_MS: 3000,       // required full-stop dwell at a stop sign
+    NEAR_FT: 130,             // an intersection object within this range counts as "ahead"
+    LATERAL_FT: 16,           // |lateral| within this counts as in our path
+    STOPPED_MPH: 2,           // at/under this we treat the car as stopped
+    LEARN_ALPHA: 0.3,         // EMA weight applied to each newly observed red duration
+    FRESH_MS: 900,            // how long an intersection stays "seen" after the last detection
+  },
 };

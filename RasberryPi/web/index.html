@@ -54,6 +54,21 @@
 
           <!-- vision source chip -->
           <div class="vsrc" id="vsrc"><span class="dot" id="vsrcDot"></span><span id="vsrcText">VISION OFF</span></div>
+
+          <!-- scene-mode chip (driving-type label) -->
+          <div class="scenechip" id="sceneChip"><span id="sceneChipText">SCENE</span></div>
+
+          <!-- intersection countdown timer (Urus-style), shown in scene mode -->
+          <div class="xtimer" id="xtimer">
+            <div class="xt-ring">
+              <div class="xt-face">
+                <span class="xt-label">SIGNAL</span>
+                <span class="xt-main">0.0s</span>
+                <span class="xt-sub"></span>
+              </div>
+            </div>
+            <div class="xt-hint"></div>
+          </div>
         </div>
       </section>
 
@@ -89,6 +104,8 @@
   </div>
 
   <script src="config.js"></script>
+  <script src="drive_scenes.js"></script>
+  <script src="intersection.js"></script>
   <script src="dashboard.js"></script>
   <script>
     // Auto-reload: bridge watches web/ for file changes and tells us to reload.

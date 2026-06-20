@@ -2,6 +2,29 @@
 
 RetroVision is a driving-vision dashboard app designed to provide a Tesla-style driver assistance HUD. It features MJPEG streaming, YOLO detections, ByteTrack IDs, plate OCR, and lane detection.
 
+## Scene Mode & Intersection Timer
+RetroVision can run in two center-panel modes:
+
+- **Perception HUD** — the realtime, frame-accurate view (camera + YOLO boxes + lanes).
+- **Scene Mode** *(default)* — a "less realtime, more visual" view. Instead of tracking
+  every object, it infers the **driving type** from telemetry + coarse vision cues and paints
+  a stylised retro/synthwave scene that matches it: `PARKED`, `TRAFFIC`, `CITY`, `SUBURBAN`,
+  `HIGHWAY`, or `CANYON`. The scene scrolls in parallax at a rate tied to road speed, and the
+  classifier uses hysteresis so the scene stays stable instead of flickering between types.
+
+On top of the scene sits an **Urus-style intersection countdown** (`intersection.js`):
+- **Approach** — when a traffic light or stop sign is ahead, a ring counts down the
+  estimated time-to-arrival (distance ÷ speed).
+- **Stop hold** — at a stop sign, a 3s "complete stop" timer, then `GO`.
+- **Red wait** — at a red light, a *predicted* time-to-green. The prediction is **learned**:
+  observed red-phase durations are folded into a running average (persisted in
+  `localStorage`), so the estimate sharpens the more lights you sit through. Actual elapsed
+  wait is always shown beneath the prediction.
+
+**Toggles:** press `s` to switch between Scene Mode and the Perception HUD; or use
+`?scene=1` / `?scene=0` in the URL. Defaults and tuning live under `SCENE` and
+`INTERSECTION` in `RasberryPi/web/config.js` (`SCENE_MODE_DEFAULT` flips the startup view).
+
 ## How to Run
 To start both the backend YOLO server and the frontend web server:
 ```bash
