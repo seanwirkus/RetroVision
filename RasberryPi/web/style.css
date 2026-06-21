@@ -214,6 +214,54 @@ html, body {
 }
 .vsrc .dot { width: 9px; height: 9px; border-radius: 50%; background: #555; }
 
+/* ---------- scene mode: driving-type chip ---------- */
+.scenechip {
+  position: absolute; left: 16px; bottom: 12px; z-index: 4;
+  display: none; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 12px; background: rgba(0,0,0,.42);
+  font-size: 13px; font-weight: 800; letter-spacing: 2px;
+  color: var(--scene-accent, #22d3ee);
+}
+.scenechip::before {
+  content: ''; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--scene-accent, #22d3ee); box-shadow: 0 0 8px var(--scene-accent, #22d3ee);
+}
+body.scene-mode .scenechip { display: flex; }
+body.scene-mode .vsrc { display: none; }     /* scenechip replaces the vision chip */
+body.scene-mode .fcw  { display: none; }      /* collision banner belongs to the perception HUD */
+
+/* ---------- intersection countdown timer (Urus-style) ---------- */
+.xtimer {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 6;
+  display: none; flex-direction: column; align-items: center; gap: 5px;
+  --xt-accent: #22d3ee; --xt-frac: 1;
+}
+.xtimer.on { display: flex; }
+.xt-ring {
+  position: relative; width: 132px; height: 132px; border-radius: 50%;
+  background: conic-gradient(from -90deg,
+    var(--xt-accent) calc(var(--xt-frac) * 360deg),
+    rgba(255,255,255,0.07) 0);
+  box-shadow: 0 0 18px rgba(0,0,0,.5);
+  transition: background .2s linear;
+}
+.xt-face {
+  position: absolute; inset: 7px; border-radius: 50%;
+  background: radial-gradient(120% 120% at 50% 30%, #0a0e15 0%, #05070b 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.xt-label { font-size: 11px; font-weight: 800; letter-spacing: 2px; color: var(--xt-accent);
+  text-shadow: 0 0 10px var(--xt-accent); }
+.xt-main  { font-size: 36px; font-weight: 800; line-height: 1; color: #fff;
+  font-variant-numeric: tabular-nums; }
+.xt-sub   { font-size: 9px; font-weight: 600; letter-spacing: .4px; color: var(--muted); margin-top: 2px; }
+.xt-hint  { font-size: 9px; letter-spacing: .5px; color: #5d6470; }
+.xtimer.pulse .xt-ring { animation: xtPulse .5s steps(2) infinite; }
+@keyframes xtPulse { 0% { filter: none; } 100% { filter: brightness(1.7) saturate(1.4); } }
+body.lite .xtimer.pulse .xt-ring { animation: none; }
+body.clean .scenechip, body.clean .xtimer { display: none; }
+
 /* ---------- bottom status bar ---------- */
 .statusbar {
   position: absolute; bottom: 4px; left: 0; right: 0; z-index: 5;

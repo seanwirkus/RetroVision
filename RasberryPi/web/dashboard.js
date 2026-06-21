@@ -44,6 +44,23 @@ const LITE = (() => {
 })();
 if (LITE) document.body.classList.add('lite');
 
+/* ---- scene mode (generated retro driving scenes) ----
+ * A "less realtime, more visual" view: instead of the frame-accurate perception
+ * HUD, infer the driving type from telemetry + coarse vision and paint a
+ * stylised synthwave scene, with an Urus-style intersection countdown on top.
+ * Default from config; force with ?scene=1 / ?scene=0; toggle live with "s". */
+let sceneMode = (() => {
+  const qp = new URLSearchParams(location.search);
+  if (qp.get('scene') === '1') return true;
+  if (qp.get('scene') === '0') return false;
+  return CFG.SCENE_MODE_DEFAULT !== false;
+})();
+function applySceneMode() { document.body.classList.toggle('scene-mode', sceneMode); }
+applySceneMode();
+window.addEventListener('keydown', (e) => {
+  if (e.key === 's' || e.key === 'S') { sceneMode = !sceneMode; applySceneMode(); }
+});
+
 function fit() {
   if (isClean()) {
     // panel fills the window via CSS; no 1920x440 letterbox scaling.
@@ -145,6 +162,7 @@ const elSeq = $('seqText'), elVisStat = $('visStat');
 const elFcw = $('fcw'), elFcwState = $('fcwState'), elFcwReason = $('fcwReason');
 const elVsrc = $('vsrc'), elVsrcDot = $('vsrcDot'), elVsrcText = $('vsrcText');
 const camFeed = $('camFeed'), camTag = $('camTag');
+const elSceneChip = $('sceneChip'), elSceneChipText = $('sceneChipText');
 
 /* sequential shift-light LEDs across the tach (green → yellow → red toward redline) */
 const rpmRingEl = $('rpmRing');
@@ -1129,6 +1147,25 @@ const FCW_COLORS = [
   { wedge: 'rgba(244,63,94,0.22)' },
 ];
 
+/* ---------------- scene mode render ----------------
+ * Classify the driving type, paint the matching retro scene onto the HUD canvas,
+ * and drive the intersection countdown. The camera/perception overlays are kept
+ * dark while scene mode owns the panel. */
+function renderScene(now, dets) {
+  camFeed.classList.remove('on');
+  if (camTag) camTag.style.display = 'none';
+  const sc = (window.DriveScene && window.DriveScene.update(
+    { mph: shown.mph, rpm: shown.rpm, lights: target.lights || {}, dets }, now)) || null;
+  if (window.DriveScene) window.DriveScene.render(ctx, HW, HH, now);
+  if (window.IntersectionTimer) window.IntersectionTimer.update({ mph: shown.mph, dets }, now);
+  if (sc && elSceneChipText) {
+    const live = vision.configured && (now - vision.lastRx) / 1000 < 1.2 && !vision.packetStale;
+    const txt = sc.label + (live ? '' : ' · SIM');
+    if (elSceneChipText.textContent !== txt) elSceneChipText.textContent = txt;
+    if (elSceneChip && sc.theme) elSceneChip.style.setProperty('--scene-accent', sc.theme.accent);
+  }
+}
+
 /* ---------------- main render loop (30fps cap for Pi 3B+) ---------------- */
 let last = performance.now();
 let lastSpeed = -1, lastRpm = -1, lastGear = '', lastLink = '';
@@ -1188,8 +1225,11 @@ function frame(now) {
   elFcwReason.textContent = fcw.reason;
   elFcw.className = 'fcw' + (fcw.level === 1 ? ' warn' : fcw.level === 2 ? ' danger' : '');
 
-  /* --- perception HUD --- */
+  /* --- perception HUD (or generated scene) --- */
   ctx.clearRect(0, 0, HW, HH);
+  if (sceneMode) {
+    renderScene(now, dets);
+  } else {
   // When the off-Pi camera is live, its MJPEG (already YOLO-annotated) fills the
   // panel behind this canvas. Keep the VisionLab 3D framework on top.
   if (!camReady && camFeed.naturalWidth > 0 && camFeed.naturalHeight > 0) {
@@ -1243,6 +1283,7 @@ function frame(now) {
     ctx.restore();
     const sorted = [...dets].sort((a, b) => (b.distM ?? 0) - (a.distM ?? 0)); // far first
     for (const d of sorted) drawDetection(d, fcw.danger.has(d));
+  }
   }
 
   /* --- turn signals + tells --- */
