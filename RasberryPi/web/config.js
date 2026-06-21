@@ -108,7 +108,14 @@ window.CLUSTER_CONFIG = {
     NEAR_FT: 130,             // an intersection object within this range counts as "ahead"
     LATERAL_FT: 16,           // |lateral| within this counts as in our path
     STOPPED_MPH: 2,           // at/under this we treat the car as stopped
+    GO_MPH: 4,                // rolling above this after a wait => moving off
     LEARN_ALPHA: 0.3,         // EMA weight applied to each newly observed red duration
     FRESH_MS: 900,            // how long an intersection stays "seen" after the last detection
+    // intelligence: presence belief + green detection
+    CONF_SHOW: 0.45,          // presence-confidence needed before the widget appears
+    GREEN_CONFIRM_FRAMES: 2,  // consecutive GREEN frames before the light is trusted green
+    RED_CONFIRM_FRAMES: 2,    // consecutive RED frames before the light is trusted red
+    LEAD_MOVE_FT: 8,          // lead vehicle range opening this much => traffic is moving (=> green)
+    BRAKE_DECEL_MPHS: 3,      // braking this hard near a signal corroborates an intersection
   },
 };

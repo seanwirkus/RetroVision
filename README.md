@@ -12,14 +12,25 @@ RetroVision can run in two center-panel modes:
   `HIGHWAY`, or `CANYON`. The scene scrolls in parallax at a rate tied to road speed, and the
   classifier uses hysteresis so the scene stays stable instead of flickering between types.
 
-On top of the scene sits an **Urus-style intersection countdown** (`intersection.js`):
-- **Approach** — when a traffic light or stop sign is ahead, a ring counts down the
-  estimated time-to-arrival (distance ÷ speed).
-- **Stop hold** — at a stop sign, a 3s "complete stop" timer, then `GO`.
-- **Red wait** — at a red light, a *predicted* time-to-green. The prediction is **learned**:
-  observed red-phase durations are folded into a running average (persisted in
-  `localStorage`), so the estimate sharpens the more lights you sit through. Actual elapsed
-  wait is always shown beneath the prediction.
+On top of the scene sits an **Urus-style intersection countdown** (`intersection.js`).
+Rather than trusting any single perception frame, it **fuses vision with motion** into
+two debounced beliefs:
+
+- **Is an intersection present?** A confidence value (0–1) builds when a light/stop sign is
+  detected and is *corroborated by motion* — hard braking or coming to a stop shortly after
+  seeing a signal sustains the belief even while the detection blinks in and out. The
+  approach readout shows how sure it is ("% sure").
+- **Has it gone green?** Declared from whichever signal fires first, so it works even when
+  the light head isn't cleanly visible: the light is **confirmed GREEN** across several
+  frames, **or** the lead vehicle ahead **pulls away**, **or** our own car **rolls off**
+  after the wait.
+
+Phases: **Approach** (time-to-arrival = distance ÷ speed) · **Stop hold** (3s full-stop
+dwell at a stop sign, then `GO`) · **Red wait** (a *learned* predicted time-to-green) ·
+**GO** (confirmation flash). The red-wait prediction is **learned**: observed red-phase
+durations fold into a running mean + variance (persisted in `localStorage`), so the estimate
+sharpens and shows a ± confidence the more lights you sit through. Actual elapsed wait is
+always shown beneath the prediction.
 
 **Toggles:** press `s` to switch between Scene Mode and the Perception HUD; or use
 `?scene=1` / `?scene=0` in the URL. Defaults and tuning live under `SCENE` and
